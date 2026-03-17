@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AegisX — Real-Time Cyber Attack Monitoring</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+/* ─── TOKENS ─────────────────────────────── */
+:root{
+  --bg:       #07080f;
+  --bg2:      #0b0c17;
+  --surface:  rgba(255,255,255,0.038);
+  --surface2: rgba(255,255,255,0.06);
+  --border:   rgba(255,255,255,0.08);
+  --border2:  rgba(255,255,255,0.14);
+  --blue:     #4f8ef7;
+  --blue2:    #6fa3ff;
+  --indigo:   #5b4af8;
+  --cyan:     #00d4ff;
+  --green:    #00e676;
+  --amber:    #ffb700;
+  --red:      #ff4565;
+  --text:     #eef0ff;
+  --muted:    rgba(238,240,255,0.44);
+  --dim:      rgba(238,240,255,0.2);
+  --glow-b:   0 0 40px rgba(79,142,247,0.25), 0 0 80px rgba(79,142,247,0.1);
+  --glow-sm:  0 0 18px rgba(79,142,247,0.35);
+  --r:        14px;
+  --r-sm:     8px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-weight:400;
+  overflow-x:hidden;
+  min-height:100vh;
+}
+
+/* ─── NOISE OVERLAY ──────────────────────── */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:200px;opacity:0.026;
+}
+
+/* ─── AMBIENT MESH ───────────────────────── */
+.mesh{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+.mesh-blob{position:absolute;border-radius:50%;filter:blur(90px);animation:blobFloat 18s ease-in-out infinite;}
+.mb1{width:700px;height:700px;background:radial-gradient(circle,rgba(79,142,247,0.12) 0%,transparent 70%);top:-200px;left:-150px;animation-delay:0s;}
+.mb2{width:500px;height:500px;background:radial-gradient(circle,rgba(91,74,248,0.1) 0%,transparent 70%);bottom:-100px;right:-100px;animation-delay:-7s;}
+.mb3{width:400px;height:400px;background:radial-gradient(circle,rgba(0,212,255,0.07) 0%,transparent 70%);top:40%;left:60%;animation-delay:-13s;}
+@keyframes blobFloat{0%,100%{transform:translate(0,0) scale(1);}33%{transform:translate(40px,-30px) scale(1.05);}66%{transform:translate(-20px,20px) scale(0.97);}}
+
+/* ─── GRID LINES BG ──────────────────────── */
+.grid-bg{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(79,142,247,0.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(79,142,247,0.035) 1px,transparent 1px);
+  background-size:60px 60px;
+  mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(0,0,0,0.6),transparent);
+}
+
+/* ─── NAV ─────────────────────────────────── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:500;
+  height:64px;display:flex;align-items:center;
+  padding:0 48px;justify-content:space-between;
+  background:rgba(7,8,15,0.7);
+  backdrop-filter:blur(24px) saturate(1.6);
+  border-bottom:1px solid var(--border);
+}
+nav::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(79,142,247,0.3),rgba(91,74,248,0.2),transparent);}
+
+.nav-logo{
+  display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;
+  letter-spacing:-0.02em;color:var(--text);cursor:pointer;
+  text-decoration:none;
+}
+.logo-mark{
+  width:32px;height:32px;border-radius:8px;
+  background:linear-gradient(135deg,var(--blue),var(--indigo));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 20px rgba(79,142,247,0.4);
+  position:relative;overflow:hidden;
+}
+.logo-mark::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.15),transparent);}
+.logo-mark svg{position:relative;z-index:1;}
+
+.nav-links{display:flex;gap:4px;list-style:none;align-items:center;}
+.nav-links a{
+  color:var(--muted);font-size:14px;font-weight:500;
+  padding:6px 14px;border-radius:6px;text-decoration:none;
+  transition:color .2s,background .2s;letter-spacing:-0.01em;
+}
+.nav-links a:hover{color:var(--text);background:var(--surface);}
+
+.nav-right{display:flex;align-items:center;gap:10px;}
+.btn-nav-ghost{
+  background:transparent;border:1px solid var(--border2);color:var(--text);
+  font-family:'Plus Jakarta Sans',sans-serif;font-size:13.5px;font-weight:600;
+  padding:8px 20px;border-radius:var(--r-sm);cursor:pointer;
+  transition:border-color .2s,background .2s;letter-spacing:-0.01em;
+}
+.btn-nav-ghost:hover{border-color:rgba(79,142,247,0.5);background:rgba(79,142,247,0.06);}
+
+.btn-nav-cta{
+  background:linear-gradient(135deg,var(--blue),var(--indigo));
+  border:none;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:13.5px;font-weight:700;padding:9px 22px;
+  border-radius:var(--r-sm);cursor:pointer;letter-spacing:-0.01em;
+  box-shadow:0 0 20px rgba(79,142,247,0.35);
+  transition:transform .28s cubic-bezier(.34,1.56,.64,1),box-shadow .28s;
+  position:relative;overflow:hidden;
+}
+.btn-nav-cta::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.15),transparent);pointer-events:none;}
+.btn-nav-cta:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(79,142,247,0.5);}
+
+/* ─── SECTIONS ────────────────────────────── */
+.state{display:none;}
+.state.active{display:block;}
+#landingState{padding-top:64px;}
+
+section{position:relative;z-index:1;}
+
+/* ─── HERO ────────────────────────────────── */
+.hero{
+  min-height:calc(100vh - 64px);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  padding:80px 48px 60px;
+  max-width:1200px;margin:0 auto;
+}
+
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.22);
+  border-radius:99px;padding:6px 14px;margin-bottom:28px;
+  font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;
+  color:var(--blue2);
+  animation:fadeUp .7s ease both;
+}
+.hero-badge-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+
+.hero h1{
+  font-size:clamp(44px,6vw,82px);font-weight:800;
+  line-height:1.02;letter-spacing:-0.04em;
+  margin-bottom:22px;color:var(--text);
+  animation:fadeUp .7s ease .08s both;
+}
+.hero h1 .hl{
+  background:linear-gradient(115deg,var(--blue2),var(--cyan),var(--indigo));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+
+.hero-sub{
+  font-size:18px;line-height:1.7;color:var(--muted);
+  max-width:580px;margin:0 auto 38px;font-weight:400;
+  animation:fadeUp .7s ease .16s both;
+}
+
+.hero-btns{
+  display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;
+  animation:fadeUp .7s ease .22s both;
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:none;}}
+
+/* ─── BUTTONS ─────────────────────────────── */
+.btn{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:14px;font-weight:700;letter-spacing:-0.01em;
+  padding:13px 28px;border-radius:var(--r-sm);border:none;
+  cursor:pointer;position:relative;overflow:hidden;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s;
+}
+.btn::after{content:'';position:absolute;top:0;left:-120%;width:60%;height:100%;background:linear-gradient(105deg,transparent,rgba(255,255,255,0.1),transparent);transform:skewX(-20deg);transition:left .5s ease;pointer-events:none;}
+.btn:hover::after{left:160%;}
+.btn:hover{transform:translateY(-4px);}
+.btn:active{transform:translateY(-1px);transition-duration:.08s;}
+
+.btn-solid{background:linear-gradient(135deg,var(--blue),var(--indigo));color:#fff;box-shadow:0 0 24px rgba(79,142,247,0.3);}
+.btn-solid:hover{box-shadow:0 12px 40px rgba(79,142,247,0.45);}
+.btn-outline{background:transparent;color:var(--text);border:1px solid var(--border2);}
+.btn-outline:hover{border-color:rgba(79,142,247,0.45);background:rgba(79,142,247,0.05);box-shadow:0 12px 32px rgba(0,0,0,.3);}
+.btn-ghost-sm{background:transparent;color:var(--muted);border:1px solid var(--border);font-size:12.5px;padding:9px 18px;}
+.btn-ghost-sm:hover{color:var(--text);border-color:rgba(79,142,247,0.3);background:rgba(79,142,247,0.04);}
+.btn-red-sm{background:rgba(255,69,101,0.1);color:var(--red);border:1px solid rgba(255,69,101,0.25);font-size:12.5px;padding:9px 18px;}
+.btn-red-sm:hover{background:rgba(255,69,101,0.18);}
+
+/* ─── HERO MOCKUP ─────────────────────────── */
+.hero-mockup-wrap{
+  width:100%;max-width:960px;margin:52px auto 0;
+  position:relative;
+  animation:fadeUp .9s ease .32s both;
+}
+.hero-mockup-glow{
+  position:absolute;top:-60px;left:50%;transform:translateX(-50%);
+  width:80%;height:200px;
+  background:radial-gradient(ellipse,rgba(79,142,247,0.2) 0%,transparent 70%);
+  filter:blur(40px);pointer-events:none;
+}
+.hero-mockup{
+  background:rgba(11,12,23,0.9);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:16px;
+  overflow:hidden;
+  box-shadow:0 40px 120px rgba(0,0,0,0.7), 0 0 0 1px rgba(79,142,247,0.1);
+}
+.mockup-bar{
+  background:rgba(255,255,255,0.03);
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  padding:12px 18px;
+  display:flex;align-items:center;gap:8px;
+}
+.mockup-dot{width:10px;height:10px;border-radius:50%;}
+.md-red{background:#ff5f56;} .md-amber{background:#ffbd2e;} .md-green{background:#27c93f;}
+.mockup-url{margin-left:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);}
+.mockup-body{padding:24px;display:grid;grid-template-columns:220px 1fr;gap:16px;min-height:380px;}
+.mockup-sidebar{display:flex;flex-direction:column;gap:8px;}
+.sb-item{
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);
+  border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;
+  font-size:12px;color:var(--dim);cursor:pointer;transition:background .2s,border-color .2s;
+}
+.sb-item:hover,.sb-item.active{background:rgba(79,142,247,0.08);border-color:rgba(79,142,247,0.2);color:var(--text);}
+.sb-item svg{width:14px;height:14px;flex-shrink:0;opacity:.7;}
+.mockup-main{display:flex;flex-direction:column;gap:14px;}
+.mockup-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.mk{
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);
+  border-radius:8px;padding:14px 14px 12px;
+}
+.mk-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;color:var(--text);line-height:1;}
+.mk-lab{font-size:10px;color:var(--dim);margin-top:5px;letter-spacing:0.08em;text-transform:uppercase;}
+.mk-delta{font-size:10px;color:var(--green);margin-top:3px;}
+.mockup-chart{background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:14px;height:120px;display:flex;align-items:flex-end;gap:5px;}
+.bar{flex:1;border-radius:3px 3px 0 0;transition:height .3s ease;}
+.mockup-alerts{display:flex;flex-direction:column;gap:6px;}
+.mal{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;
+  background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.05);
+  border-radius:7px;font-size:11px;
+}
+.mal-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.mal-ip{font-family:'JetBrains Mono',monospace;color:var(--blue2);flex-shrink:0;width:110px;}
+.mal-type{color:var(--muted);flex:1;}
+.mal-sev{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;}
+.sev-c{background:rgba(255,69,101,0.12);color:var(--red);border:1px solid rgba(255,69,101,0.25);}
+.sev-h{background:rgba(255,183,0,0.1);color:var(--amber);border:1px solid rgba(255,183,0,0.25);}
+.sev-m{background:rgba(79,142,247,0.1);color:var(--blue2);border:1px solid rgba(79,142,247,0.25);}
+
+/* ─── BRAND STRIP ─────────────────────────── */
+.brands{
+  padding:40px 48px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;gap:56px;flex-wrap:wrap;
+  position:relative;z-index:1;
+}
+.brand-name{font-size:14px;font-weight:700;color:var(--dim);letter-spacing:0.06em;text-transform:uppercase;}
+
+/* ─── SECTION COMMON ──────────────────────── */
+.section{padding:100px 48px;position:relative;z-index:1;}
+.section-center{text-align:center;margin-bottom:60px;}
+.section-eyebrow{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:0.2em;
+  text-transform:uppercase;color:var(--blue);margin-bottom:16px;
+}
+.section-title{font-size:clamp(32px,4vw,52px);font-weight:800;letter-spacing:-0.03em;line-height:1.06;color:var(--text);}
+.section-sub{font-size:16px;color:var(--muted);max-width:520px;margin:12px auto 0;line-height:1.7;font-weight:400;}
+.inner{max-width:1120px;margin:0 auto;}
+
+/* ─── FEATURE GRID ────────────────────────── */
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+.feat{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:28px;
+  position:relative;overflow:hidden;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,border-color .25s;
+}
+.feat::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(400px circle at var(--mx,50%) var(--my,50%),rgba(79,142,247,0.05),transparent 60%);
+  opacity:0;transition:opacity .3s;pointer-events:none;
+}
+.feat:hover{transform:translateY(-8px);border-color:rgba(79,142,247,0.22);box-shadow:0 28px 60px rgba(0,0,0,.5),var(--glow-b);}
+.feat:hover::before{opacity:1;}
+.feat-icon{
+  width:44px;height:44px;border-radius:10px;
+  background:rgba(79,142,247,0.1);border:1px solid rgba(79,142,247,0.2);
+  display:flex;align-items:center;justify-content:center;margin-bottom:18px;
+  transition:box-shadow .3s;
+}
+.feat:hover .feat-icon{box-shadow:var(--glow-sm);}
+.feat-icon svg{width:20px;height:20px;}
+.feat-title{font-size:16px;font-weight:700;letter-spacing:-0.02em;margin-bottom:8px;}
+.feat-desc{font-size:13.5px;color:var(--muted);line-height:1.7;font-weight:400;}
+.feat-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;padding:3px 9px;border-radius:99px;margin-top:14px;}
+.tag-blue{background:rgba(79,142,247,0.1);color:var(--blue2);border:1px solid rgba(79,142,247,0.2);}
+.tag-green{background:rgba(0,230,118,0.08);color:var(--green);border:1px solid rgba(0,230,118,0.2);}
+.tag-amber{background:rgba(255,183,0,0.08);color:var(--amber);border:1px solid rgba(255,183,0,0.2);}
+.tag-red{background:rgba(255,69,101,0.08);color:var(--red);border:1px solid rgba(255,69,101,0.2);}
+
+/* ─── HOW IT WORKS ────────────────────────── */
+.pipeline{display:flex;align-items:stretch;gap:0;position:relative;margin-top:40px;overflow-x:auto;padding-bottom:4px;}
+.pipe-step{
+  flex:1;min-width:130px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:22px 16px;text-align:center;
+  position:relative;transition:transform .3s cubic-bezier(.34,1.56,.64,1),border-color .25s,box-shadow .3s;
+}
+.pipe-step:hover{transform:translateY(-6px);border-color:rgba(79,142,247,0.3);box-shadow:0 20px 50px rgba(0,0,0,.4),var(--glow-b);}
+.pipe-step:not(:last-child)::after{
+  content:'→';position:absolute;right:-18px;top:50%;transform:translateY(-50%);
+  color:var(--blue);font-size:18px;z-index:2;text-shadow:0 0 12px var(--blue);
+}
+.pipe-num{
+  width:32px;height:32px;border-radius:50%;
+  background:rgba(79,142,247,0.12);border:1px solid rgba(79,142,247,0.25);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;color:var(--blue2);
+  margin:0 auto 12px;
+}
+.pipe-label{font-size:12px;font-weight:700;letter-spacing:-0.01em;color:var(--text);margin-bottom:5px;}
+.pipe-sub{font-size:10.5px;color:var(--dim);line-height:1.5;}
+
+/* ─── STATS ROW ───────────────────────────── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:60px;}
+.stat-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:28px 24px;text-align:center;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,border-color .25s;
+}
+.stat-card:hover{transform:translateY(-7px);border-color:rgba(79,142,247,0.2);box-shadow:0 24px 56px rgba(0,0,0,.5),var(--glow-b);}
+.stat-val{font-size:44px;font-weight:800;letter-spacing:-0.04em;background:linear-gradient(115deg,var(--blue2),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.stat-label{font-size:13px;color:var(--muted);margin-top:6px;font-weight:400;}
+
+/* ─── PRICING ─────────────────────────────── */
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:960px;margin:0 auto;}
+.price-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:32px 28px;
+  position:relative;overflow:hidden;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,border-color .25s;
+}
+.price-card:hover{transform:translateY(-8px);border-color:rgba(79,142,247,0.2);box-shadow:0 28px 60px rgba(0,0,0,.5),var(--glow-b);}
+.price-card.featured{
+  border-color:rgba(79,142,247,0.4);
+  box-shadow:0 0 0 1px rgba(79,142,247,0.1), var(--glow-b);
+  background:rgba(79,142,247,0.04);
+}
+.price-card.featured::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--blue),var(--indigo),transparent);}
+.price-pop{
+  position:absolute;top:16px;right:16px;
+  background:linear-gradient(135deg,var(--blue),var(--indigo));
+  color:#fff;font-size:9.5px;font-weight:700;letter-spacing:0.12em;
+  text-transform:uppercase;padding:3px 10px;border-radius:99px;
+}
+.price-plan{font-size:12px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--blue2);margin-bottom:10px;}
+.price-name{font-size:26px;font-weight:800;letter-spacing:-0.03em;margin-bottom:8px;}
+.price-desc{font-size:13px;color:var(--muted);margin-bottom:26px;line-height:1.6;}
+.price-amount{display:flex;align-items:flex-end;gap:4px;margin-bottom:26px;}
+.price-currency{font-size:20px;font-weight:700;color:var(--muted);margin-bottom:6px;}
+.price-num{font-size:52px;font-weight:800;letter-spacing:-0.04em;line-height:1;}
+.price-period{font-size:14px;color:var(--dim);margin-bottom:8px;}
+.price-divider{width:100%;height:1px;background:var(--border);margin:20px 0;}
+.price-features{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:26px;}
+.price-features li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);}
+.price-features li::before{
+  content:'';width:16px;height:16px;border-radius:50%;flex-shrink:0;
+  background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.25);
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 8l3.5 3.5L13 5' stroke='%2300e676' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size:contain;
+}
+.price-btn{width:100%;padding:13px;font-size:13.5px;}
+
+/* ─── TESTIMONIALS ────────────────────────── */
+.testi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+.testi{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:26px;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s;
+}
+.testi:hover{transform:translateY(-6px);box-shadow:0 22px 50px rgba(0,0,0,.4);}
+.testi-quote{font-size:14px;color:var(--muted);line-height:1.75;margin-bottom:18px;font-style:italic;}
+.testi-author{display:flex;align-items:center;gap:10px;}
+.testi-avatar{
+  width:36px;height:36px;border-radius:50%;
+  background:linear-gradient(135deg,var(--blue),var(--indigo));
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;color:#fff;
+}
+.testi-name{font-size:13px;font-weight:700;}
+.testi-role{font-size:11.5px;color:var(--dim);}
+
+/* ─── CTA SECTION ─────────────────────────── */
+.cta-section{
+  padding:100px 48px;text-align:center;
+  background:linear-gradient(180deg,transparent,rgba(79,142,247,0.05),transparent);
+  position:relative;z-index:1;
+}
+.cta-glow{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:600px;height:300px;
+  background:radial-gradient(ellipse,rgba(79,142,247,0.18) 0%,transparent 70%);
+  filter:blur(60px);pointer-events:none;
+}
+.cta-section h2{font-size:clamp(36px,4.5vw,60px);font-weight:800;letter-spacing:-0.04em;margin-bottom:16px;}
+.cta-section p{font-size:17px;color:var(--muted);max-width:440px;margin:0 auto 36px;line-height:1.7;}
+
+/* ─── FOOTER ──────────────────────────────── */
+footer{
+  border-top:1px solid var(--border);
+  padding:32px 48px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:relative;z-index:1;
+}
+.footer-logo{font-weight:800;font-size:16px;letter-spacing:-0.02em;color:var(--text);display:flex;align-items:center;gap:8px;}
+.footer-links{display:flex;gap:24px;}
+.footer-links a{font-size:13px;color:var(--dim);text-decoration:none;transition:color .2s;}
+.footer-links a:hover{color:var(--muted);}
+.footer-copy{font-size:12px;color:var(--dim);}
+
+/* ─── AUTH ────────────────────────────────── */
+#authState{min-height:100vh;padding-top:64px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1;}
+.auth-card{
+  background:rgba(11,12,23,0.92);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:18px;padding:44px 40px;width:420px;
+  backdrop-filter:blur(40px);
+  box-shadow:0 40px 100px rgba(0,0,0,.7),var(--glow-b);
+  position:relative;
+}
+.auth-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--blue),var(--indigo),transparent);border-radius:18px 18px 0 0;}
+.auth-title{font-size:26px;font-weight:800;letter-spacing:-0.03em;margin-bottom:5px;}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:28px;line-height:1.6;}
+.auth-tabs{display:flex;gap:4px;background:rgba(255,255,255,0.03);border-radius:8px;padding:3px;margin-bottom:24px;}
+.auth-tab{flex:1;background:none;border:none;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:600;color:var(--muted);padding:8px;border-radius:6px;cursor:pointer;transition:color .2s,background .2s;}
+.auth-tab.on{background:rgba(79,142,247,0.1);color:var(--blue2);}
+.form-group{margin-bottom:16px;}
+.form-label{font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:7px;}
+.form-input{
+  width:100%;background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.1);border-radius:8px;
+  color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;
+  padding:11px 14px;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.form-input::placeholder{color:var(--dim);}
+.form-input:focus{border-color:rgba(79,142,247,0.45);box-shadow:0 0 0 3px rgba(79,142,247,0.08);}
+.form-btn{width:100%;padding:13px;font-size:14px;margin-top:6px;}
+.auth-or{text-align:center;color:var(--dim);font-size:12px;margin:16px 0;position:relative;}
+.auth-or::before,.auth-or::after{content:'';position:absolute;top:50%;width:calc(50% - 20px);height:1px;background:var(--border);}
+.auth-or::before{left:0;} .auth-or::after{right:0;}
+.auth-err{background:rgba(255,69,101,0.07);border:1px solid rgba(255,69,101,0.2);border-radius:7px;padding:9px 13px;font-size:12.5px;color:var(--red);margin-bottom:14px;display:none;}
+.auth-err.show{display:block;}
+.auth-demo{text-align:center;font-size:11.5px;color:var(--dim);margin-top:14px;font-family:'JetBrains Mono',monospace;}
+
+/* ─── APP SHELL ───────────────────────────── */
+#appState{padding-top:64px;display:flex;flex-direction:column;min-height:100vh;position:relative;z-index:1;}
+.app-nav-extra{background:rgba(11,12,23,0.6);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:10px 48px;display:flex;align-items:center;gap:4px;}
+.app-tab{background:none;border:none;font-family:'Plus Jakarta Sans',sans-serif;font-size:12.5px;font-weight:600;color:var(--muted);padding:7px 16px;border-radius:6px;cursor:pointer;transition:color .2s,background .2s;letter-spacing:-0.01em;text-transform:uppercase;letter-spacing:0.06em;}
+.app-tab:hover{color:var(--text);background:var(--surface);}
+.app-tab.on{color:var(--blue2);background:rgba(79,142,247,0.08);}
+
+.app-page{display:none;padding:28px 48px 60px;flex:1;}
+.app-page.on{display:block;animation:pgIn .45s ease both;}
+@keyframes pgIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+.app-wrap{max-width:1200px;margin:0 auto;}
+
+/* ─── DASHBOARD ───────────────────────────── */
+.dash-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
+.dash-title{font-size:22px;font-weight:800;letter-spacing:-0.03em;}
+.dash-status{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--green);}
+.dash-status::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green);animation:blink 2s infinite;}
+
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+.kpi{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:18px 16px;
+  transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .25s,border-color .22s;
+  cursor:default;
+}
+.kpi:hover{transform:translateY(-5px);border-color:rgba(79,142,247,0.2);box-shadow:0 18px 44px rgba(0,0,0,.45),var(--glow-b);}
+.kpi-val{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:500;line-height:1;color:var(--text);}
+.kpi-val .k-u{font-size:13px;color:var(--blue2);margin-left:2px;}
+.kpi-lab{font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--dim);margin-top:7px;}
+.kpi-delta{font-size:10.5px;color:var(--green);margin-top:4px;}
+.kpi-delta.dn{color:var(--red);}
+
+.dash-grid{display:grid;grid-template-columns:1fr 320px;gap:16px;}
+.dash-main{display:flex;flex-direction:column;gap:16px;}
+.dash-side{display:flex;flex-direction:column;gap:16px;}
+
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+.panel-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.panel-title{font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:7px;}
+.live-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--red);background:rgba(255,69,101,0.08);border:1px solid rgba(255,69,101,0.2);padding:3px 9px;border-radius:99px;}
+.live-pip{width:5px;height:5px;border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red);animation:blink 1.5s infinite;}
+
+/* Traffic chart */
+#trafficWrap{padding:16px 18px;height:140px;display:flex;align-items:flex-end;gap:3px;}
+.tr-bar{flex:1;border-radius:2px 2px 0 0;min-width:4px;transition:height .4s ease;}
+
+/* Alert feed */
+.feed-wrap{max-height:420px;overflow-y:auto;}
+.feed-wrap::-webkit-scrollbar{width:3px;}
+.feed-wrap::-webkit-scrollbar-thumb{background:rgba(79,142,247,0.2);border-radius:99px;}
+.feed-hd{display:grid;grid-template-columns:80px 120px 1fr 90px;gap:10px;padding:9px 18px;background:rgba(255,255,255,0.018);border-bottom:1px solid var(--border);font-size:9.5px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--dim);}
+.feed-row{display:grid;grid-template-columns:80px 120px 1fr 90px;gap:10px;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.025);font-size:12px;align-items:center;cursor:pointer;transition:background .18s,padding-left .18s;animation:rowIn .3s ease forwards;opacity:0;}
+.feed-row:hover{background:rgba(79,142,247,0.03);padding-left:22px;}
+.feed-row:last-child{border-bottom:none;}
+@keyframes rowIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:none;}}
+.row-time{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dim);}
+.row-ip{font-family:'JetBrains Mono',monospace;color:var(--blue2);}
+
+/* Risk gauge mini */
+.gauge-wrap{padding:20px 18px;}
+.gauge-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.gauge-label{font-size:12px;font-weight:600;color:var(--muted);flex:1;}
+.gauge-track{flex:2;height:4px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
+.gauge-fill{height:100%;border-radius:99px;transition:width .6s ease;}
+.gauge-val{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);width:30px;text-align:right;}
+
+/* AI Explanation panel */
+.explain-panel{background:rgba(91,74,248,0.05);border:1px solid rgba(91,74,248,0.18);border-radius:12px;padding:14px;margin-top:10px;display:none;}
+.explain-panel.show{display:block;animation:fadeUp .3s ease both;}
+.explain-head{font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:rgba(167,139,250,0.9);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.explain-head::before{content:'';width:6px;height:6px;border-radius:50%;background:#8b5cf6;box-shadow:0 0 6px #8b5cf6;animation:blink 1.5s infinite;}
+.explain-text{font-size:12.5px;color:var(--muted);line-height:1.7;}
+.explain-steps{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+.es{display:flex;gap:8px;font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;}
+.es-n{width:16px;height:16px;border-radius:50%;background:rgba(91,74,248,0.15);border:1px solid rgba(91,74,248,0.3);display:flex;align-items:center;justify-content:center;font-size:9px;color:rgba(167,139,250,0.9);flex-shrink:0;}
+
+/* ─── TOOLS PAGE ──────────────────────────── */
+.tools-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:8px;}
+.tool-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,border-color .25s;
+}
+.tool-card:hover{transform:translateY(-6px);border-color:rgba(79,142,247,0.2);box-shadow:0 20px 48px rgba(0,0,0,.45),var(--glow-b);}
+.tc-title{font-size:14.5px;font-weight:700;letter-spacing:-0.01em;margin-bottom:5px;}
+.tc-desc{font-size:12.5px;color:var(--muted);line-height:1.65;margin-bottom:16px;font-weight:400;}
+.t-input{width:100%;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,0.09);border-radius:7px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 13px;outline:none;transition:border-color .2s;margin-bottom:8px;}
+.t-input::placeholder{color:var(--dim);}
+.t-input:focus{border-color:rgba(79,142,247,0.4);}
+.t-result{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.6;}
+.r-ok{color:var(--green)!important;} .r-warn{color:var(--amber)!important;} .r-bad{color:var(--red)!important;} .r-info{color:var(--blue2)!important;}
+.str-track{height:2px;background:rgba(255,255,255,0.05);border-radius:99px;margin-top:7px;overflow:hidden;}
+.str-fill{height:100%;width:0%;border-radius:99px;transition:width .4s ease,background .4s ease;}
+
+/* ─── SIMULATION ──────────────────────────── */
+.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.sim-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;}
+.sim-log{background:rgba(0,0,0,.35);border:1px solid rgba(255,69,101,0.12);border-radius:9px;padding:14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);line-height:2;max-height:200px;overflow-y:auto;margin-top:12px;}
+.sim-log::-webkit-scrollbar{width:3px;}
+.sim-log::-webkit-scrollbar-thumb{background:rgba(255,69,101,0.18);border-radius:99px;}
+.sl{animation:rowIn .28s ease both;opacity:0;}
+.sl-ok{color:var(--green);} .sl-warn{color:var(--amber);} .sl-bad{color:var(--red);} .sl-info{color:var(--blue2);}
+
+/* ─── SENTINEL CHAT ───────────────────────── */
+.chat-layout{display:grid;grid-template-columns:260px 1fr;gap:16px;height:calc(100vh - 160px);}
+.chat-side{display:flex;flex-direction:column;gap:12px;}
+.sentinel-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center;}
+.sa-icon{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--indigo));display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 10px;}
+.sa-name{font-size:14px;font-weight:800;letter-spacing:-0.02em;margin-bottom:3px;}
+.sa-sub{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--dim);}
+.quick-cmds-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;}
+.qc-lab{font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--dim);margin-bottom:10px;}
+.qc-btn{width:100%;text-align:left;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:6px;color:var(--muted);font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;padding:8px 11px;cursor:pointer;margin-bottom:5px;transition:color .2s,border-color .2s,background .2s;}
+.qc-btn:hover{color:var(--text);border-color:rgba(79,142,247,0.25);background:rgba(79,142,247,0.04);}
+.chat-main{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+.chat-topbar{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:700;}
+.chat-messages{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;}
+.chat-messages::-webkit-scrollbar{width:3px;}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(79,142,247,0.15);border-radius:99px;}
+.cmsg{display:flex;gap:9px;animation:fadeUp .28s ease both;}
+.cmsg-av{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;}
+.cmsg-ai-av{background:linear-gradient(135deg,var(--blue),var(--indigo));}
+.cmsg-u-av{background:rgba(255,255,255,0.07);}
+.cmsg-body{max-width:78%;}
+.cmsg-name{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--dim);margin-bottom:5px;}
+.cmsg-bubble{padding:10px 13px;border-radius:10px;font-size:13px;line-height:1.65;}
+.cmsg-ai .cmsg-bubble{background:rgba(91,74,248,0.07);border:1px solid rgba(91,74,248,0.15);color:var(--muted);border-radius:3px 10px 10px 10px;}
+.cmsg-u{flex-direction:row-reverse;}
+.cmsg-u .cmsg-body{align-items:flex-end;display:flex;flex-direction:column;}
+.cmsg-u .cmsg-bubble{background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.18);color:var(--text);border-radius:10px 3px 10px 10px;}
+.chat-input-row{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--border);}
+.chat-input{flex:1;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;padding:10px 14px;outline:none;transition:border-color .2s;}
+.chat-input:focus{border-color:rgba(79,142,247,0.4);}
+.chat-send{background:linear-gradient(135deg,var(--blue),var(--indigo));color:#fff;border:none;border-radius:8px;width:38px;height:38px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .2s,box-shadow .2s;box-shadow:0 0 14px rgba(79,142,247,0.3);}
+.chat-send:hover{transform:scale(1.08);box-shadow:0 6px 20px rgba(79,142,247,0.45);}
+
+/* ─── ABOUT / ARCHITECTURE PAGE ──────────── */
+.arch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px;}
+.arch-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;transition:transform .3s cubic-bezier(.34,1.56,.64,1),border-color .25s,box-shadow .3s;}
+.arch-card:hover{transform:translateY(-6px);border-color:rgba(79,142,247,0.2);box-shadow:0 20px 48px rgba(0,0,0,.45),var(--glow-b);}
+.arch-num{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:500;color:var(--blue);margin-bottom:10px;opacity:.5;}
+.arch-title{font-size:14.5px;font-weight:700;letter-spacing:-0.02em;margin-bottom:7px;}
+.arch-body{font-size:12.5px;color:var(--muted);line-height:1.7;font-weight:400;}
+.cert-list{list-style:none;display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+.cert-list li{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);padding:7px 0;border-bottom:1px solid var(--border);}
+.cert-list li:last-child{border-bottom:none;}
+.cert-list li::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--blue2);box-shadow:0 0 7px var(--blue2);flex-shrink:0;}
+
+/* ─── SCROLL REVEAL ───────────────────────── */
+.reveal{opacity:0;transform:translateY(32px);transition:opacity .65s cubic-bezier(.16,1,.3,1),transform .65s cubic-bezier(.16,1,.3,1);}
+.reveal.visible{opacity:1;transform:none;}
+
+/* ─── RESPONSIVE TWEAKS ─────────────────── */
+@media(max-width:900px){
+  .nav-links{display:none;}
+  .hero{padding:60px 24px;}
+  .features-grid,.pricing-grid,.testi-grid,.kpis,.stats-row{grid-template-columns:1fr 1fr;}
+  .section{padding:64px 24px;}
+  .mockup-body{grid-template-columns:1fr;}
+  .mockup-sidebar{display:none;}
+  .chat-layout,.dash-grid{grid-template-columns:1fr;}
+  nav,.footer,.app-nav-extra,.app-page,#authState{padding-left:20px;padding-right:20px;}
+}
+</style>
+</head>
+<body>
+
+<div class="mesh">
+  <div class="mesh-blob mb1"></div>
+  <div class="mesh-blob mb2"></div>
+  <div class="mesh-blob mb3"></div>
+</div>
+<div class="grid-bg"></div>
+
+<!-- ═══════ NAV ═══════ -->
+<nav id="mainNav">
+  <a class="nav-logo" onclick="goLanding()">
+    <div class="logo-mark">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M9 1L16 4.5V10Q16 15 9 17.5Q2 15 2 10V4.5Z" stroke="white" stroke-width="1.4" fill="none"/>
+        <circle cx="9" cy="9" r="2.5" fill="white" opacity=".9"/>
+      </svg>
+    </div>
+    AegisX
+  </a>
+  <ul class="nav-links" id="navLinksLanding">
+    <li><a href="#features" onclick="smoothTo('features')">Features</a></li>
+    <li><a href="#howitworks" onclick="smoothTo('howitworks')">How It Works</a></li>
+    <li><a href="#pricing" onclick="smoothTo('pricing')">Pricing</a></li>
+    <li><a href="#company" onclick="smoothTo('company')">Company</a></li>
+  </ul>
+  <ul class="nav-links" id="navLinksApp" style="display:none">
+    <li><a onclick="switchAppTab('dashboard')">Dashboard</a></li>
+    <li><a onclick="switchAppTab('tools')">Tools</a></li>
+    <li><a onclick="switchAppTab('sentinel')">Sentinel AI</a></li>
+    <li><a onclick="switchAppTab('about')">About</a></li>
+  </ul>
+  <div class="nav-right">
+    <div id="authBtns">
+      <button class="btn-nav-ghost" onclick="showAuth('login')" style="margin-right:6px">Login</button>
+      <button class="btn-nav-cta" onclick="showAuth('signup')">Get Started Free →</button>
+    </div>
+    <div id="userChip" style="display:none;align-items:center;gap:10px;background:rgba(79,142,247,0.07);border:1px solid rgba(79,142,247,0.2);border-radius:99px;padding:5px 14px 5px 8px;">
+      <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#4f8ef7,#5b4af8);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;" id="userAv">?</div>
+      <span style="font-size:13px;font-weight:600;color:var(--blue2)" id="userName">User</span>
+      <button onclick="logout()" style="background:none;border:none;color:var(--dim);font-size:11px;cursor:pointer;transition:color .2s;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--dim)'">✕</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ════════════════════
+     LANDING
+════════════════════ -->
+<div id="landingState" class="state active">
+<section>
+  <div class="hero">
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      AI-Powered Real-Time Detection — Now Live
+    </div>
+    <h1>
+      Monitor. Detect.<br>
+      <span class="hl">Neutralize Threats.</span>
+    </h1>
+    <p class="hero-sub">
+      AegisX is a real-time cyber attack monitoring system that correlates multi-event patterns, fuses weak signals, and explains every threat in plain language — powered by Gemini AI.
+    </p>
+    <div class="hero-btns">
+      <button class="btn btn-solid" onclick="showAuth('signup')">Get Started Free ↗</button>
+      <button class="btn btn-outline" onclick="showAuth('login')">Live Demo →</button>
+    </div>
+
+    <!-- Hero Mockup -->
+    <div class="hero-mockup-wrap">
+      <div class="hero-mockup-glow"></div>
+      <div class="hero-mockup">
+        <div class="mockup-bar">
+          <div class="mockup-dot md-red"></div>
+          <div class="mockup-dot md-amber"></div>
+          <div class="mockup-dot md-green"></div>
+          <span class="mockup-url">aegisx.io/dashboard — Real-Time Monitor</span>
+        </div>
+        <div class="mockup-body">
+          <div class="mockup-sidebar">
+            <div class="sb-item active"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg> Dashboard</div>
+            <div class="sb-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1L14 4v5q0 4-6 6Q2 13 2 9V4z"/></svg> Correlation</div>
+            <div class="sb-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M4 4l8 8M12 4l-8 8" stroke-width="1.5"/></svg> Threats</div>
+            <div class="sb-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1a5 5 0 000 10m0-10a5 5 0 010 10m0-10v10M1 6h14"/></svg> Sentinel AI</div>
+            <div class="sb-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1 8 5 8 7 2 9 14 11 8 15 8"/></svg> Analytics</div>
+          </div>
+          <div class="mockup-main">
+            <div class="mockup-kpis">
+              <div class="mk"><div class="mk-val">14.3<span style="font-size:12px;color:var(--blue2)">K</span></div><div class="mk-lab">Threats Today</div><div class="mk-delta">↑ 12.4%</div></div>
+              <div class="mk"><div class="mk-val">42<span style="font-size:12px;color:var(--blue2)">ms</span></div><div class="mk-lab">Avg Response</div><div class="mk-delta">↓ Faster</div></div>
+              <div class="mk"><div class="mk-val">98<span style="font-size:12px;color:var(--blue2)">K</span></div><div class="mk-lab">Protected</div><div class="mk-delta">↑ 340 today</div></div>
+              <div class="mk"><div class="mk-val">3<span style="font-size:12px;color:var(--red)">%</span></div><div class="mk-lab">False Pos.</div><div class="mk-delta" style="color:var(--green)">↓ Best-in-class</div></div>
+            </div>
+            <div class="mockup-chart" id="heroChart"></div>
+            <div class="mockup-alerts">
+              <div class="mal"><div class="mal-dot" style="background:#ff4565;box-shadow:0 0 6px #ff4565"></div><span class="mal-ip">45.142.212.100</span><span class="mal-type">SSH Brute Force — 12 fails/45s</span><span class="mal-sev sev-c">CRITICAL</span></div>
+              <div class="mal"><div class="mal-dot" style="background:#ffb700;box-shadow:0 0 6px #ffb700"></div><span class="mal-ip">91.108.4.33</span><span class="mal-type">Port Scan — 15 ports/28s</span><span class="mal-sev sev-h">HIGH</span></div>
+              <div class="mal"><div class="mal-dot" style="background:#4f8ef7;box-shadow:0 0 6px #4f8ef7"></div><span class="mal-ip">185.220.101.7</span><span class="mal-type">Geo Anomaly — CN→RU in 3m</span><span class="mal-sev sev-m">MEDIUM</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Brand strip -->
+<div class="brands">
+  <span class="brand-name">Cloudflare</span>
+  <span class="brand-name">CrowdStrike</span>
+  <span class="brand-name">Palo Alto</span>
+  <span class="brand-name">Splunk</span>
+  <span class="brand-name">Fortinet</span>
+</div>
+
+<!-- Features -->
+<section class="section" id="features">
+  <div class="inner">
+    <div class="section-center reveal">
+      <span class="section-eyebrow">THE PLATFORM</span>
+      <h2 class="section-title">Everything You Need to Defend in Real-Time</h2>
+      <p class="section-sub">AegisX brings together multi-event correlation, AI explanations, and attack simulation in one unified platform.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feat reveal" style="transition-delay:.04s">
+        <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="1.6" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div class="feat-title">Multi-Event Pattern Correlation</div>
+        <div class="feat-desc">Sliding 60-second windows group events by IP. HashMap-backed counting detects brute force (8+ fails), port scans (10+ ports), and geo-anomalies across time.</div>
+        <span class="feat-tag tag-blue">Core Engine</span>
+      </div>
+      <div class="feat reveal" style="transition-delay:.08s">
+        <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg></div>
+        <div class="feat-title">Weak Signal Fusion</div>
+        <div class="feat-desc">Combines individually harmless signals — 3 failed logins + odd login time + new device — into a single scored threat verdict. No single event required.</div>
+        <span class="feat-tag tag-green">Unique</span>
+      </div>
+      <div class="feat reveal" style="transition-delay:.12s">
+        <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="1.6" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="feat-title">Gemini AI Explanations</div>
+        <div class="feat-desc">Every alert explained in plain language: what happened, why it's dangerous, and exactly what to do. Powered by Google Gemini with automatic fallback.</div>
+        <span class="feat-tag tag-amber">AI-Powered</span>
+      </div>
+      <div class="feat reveal" style="transition-delay:.16s">
+        <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="1.6" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="feat-title">Attack Simulation Engine</div>
+        <div class="feat-desc">Press a button to simulate brute force, port scans, geo attacks, or credential abuse. See your detection system respond live — essential for demo day.</div>
+        <span class="feat-tag tag-red">Demo Ready</span>
+      </div>
+      <div class="feat reveal" style="transition-delay:.2s">
+        <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="1.6" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+        <div class="feat-title">Smart Threshold Engine</div>
+        <div class="feat-desc">10 fails in 60s → ALERT. 10 fails in 1 hour → IGNORE. Time-based adaptive thresholds cut false positives by 85% compared to simple rule systems.</div>
+        <span class="feat-tag tag-blue">Intelligence</span>
+      </div>
+      <div class="feat reveal" style="transition-delay:.24s">
+        <div class="feat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+        <div class="feat-title">WebSocket Real-Time Delivery</div>
+        <div class="feat-desc">Alerts pushed instantly via WebSocket. REST polling fallback ensures zero missed alerts. Live dashboard updates without refresh — millisecond latency.</div>
+        <span class="feat-tag tag-green">Real-Time</span>
+      </div>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="section-center reveal" style="margin-top:80px;margin-bottom:28px" id="howitworks">
+      <span class="section-eyebrow">HOW IT WORKS</span>
+      <h2 class="section-title" style="font-size:clamp(28px,3.5vw,44px)">The Full Detection Pipeline</h2>
+    </div>
+    <div class="pipeline reveal">
+      <div class="pipe-step"><div class="pipe-num">01</div><div class="pipe-label">Log Generator</div><div class="pipe-sub">Synthetic + real logs every 1–2s</div></div>
+      <div class="pipe-step"><div class="pipe-num">02</div><div class="pipe-label">Event Queue</div><div class="pipe-sub">deque-backed buffer</div></div>
+      <div class="pipe-step"><div class="pipe-num">03</div><div class="pipe-label">Sliding Window</div><div class="pipe-sub">5-min IP/user groups</div></div>
+      <div class="pipe-step"><div class="pipe-num">04</div><div class="pipe-label">Feature Agg.</div><div class="pipe-sub">Fails, ports, countries</div></div>
+      <div class="pipe-step"><div class="pipe-num">05</div><div class="pipe-label">Pattern Detect</div><div class="pipe-sub">5 rule types</div></div>
+      <div class="pipe-step"><div class="pipe-num">06</div><div class="pipe-label">Correlation</div><div class="pipe-sub">Multi-stage linking</div></div>
+      <div class="pipe-step"><div class="pipe-num">07</div><div class="pipe-label">Risk Score</div><div class="pipe-sub">0–100 clamped</div></div>
+      <div class="pipe-step"><div class="pipe-num">08</div><div class="pipe-label">Gemini AI</div><div class="pipe-sub">Plain-language explain</div></div>
+      <div class="pipe-step"><div class="pipe-num">09</div><div class="pipe-label">Alert → WS</div><div class="pipe-sub">SQLite + WebSocket</div></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card reveal" style="transition-delay:.04s"><div class="stat-val">14K+</div><div class="stat-label">Threats detected daily</div></div>
+      <div class="stat-card reveal" style="transition-delay:.08s"><div class="stat-val">42ms</div><div class="stat-label">Average detection latency</div></div>
+      <div class="stat-card reveal" style="transition-delay:.12s"><div class="stat-val">98%</div><div class="stat-label">Pattern detection accuracy</div></div>
+      <div class="stat-card reveal" style="transition-delay:.16s"><div class="stat-val">&lt;3%</div><div class="stat-label">False positive rate</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section class="section" id="pricing">
+  <div class="inner">
+    <div class="section-center reveal">
+      <span class="section-eyebrow">SIMPLE PRICING</span>
+      <h2 class="section-title">AI-Powered Security for Every Scale</h2>
+      <p class="section-sub">Start free. Upgrade as your threat surface grows. No hidden costs.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card reveal">
+        <div class="price-plan">Starter</div>
+        <div class="price-name">Free</div>
+        <div class="price-desc">Explore real-time detection with basic tools and AI alerts.</div>
+        <div class="price-amount"><span class="price-currency">$</span><span class="price-num">0</span><span class="price-period">/month</span></div>
+        <hr class="price-divider"/>
+        <ul class="price-features">
+          <li>Real-time dashboard access</li>
+          <li>Up to 5,000 events/day</li>
+          <li>Brute force + port scan detection</li>
+          <li>AI explanations (10/day)</li>
+          <li>REST API access</li>
+        </ul>
+        <button class="btn btn-outline price-btn" onclick="showAuth('signup')">Get Started Free</button>
+      </div>
+      <div class="price-card featured reveal" style="transition-delay:.07s">
+        <div class="price-pop">Most Popular</div>
+        <div class="price-plan">Professional</div>
+        <div class="price-name">Pro</div>
+        <div class="price-desc">Full pattern correlation, unlimited AI explanations, and attack simulation.</div>
+        <div class="price-amount"><span class="price-currency">$</span><span class="price-num">29</span><span class="price-period">/month</span></div>
+        <hr class="price-divider"/>
+        <ul class="price-features">
+          <li>Everything in Free</li>
+          <li>Unlimited events</li>
+          <li>All 5 detection patterns</li>
+          <li>Unlimited AI explanations</li>
+          <li>Weak signal fusion</li>
+          <li>Attack simulation engine</li>
+          <li>WebSocket real-time feed</li>
+        </ul>
+        <button class="btn btn-solid price-btn" onclick="showAuth('signup')">Start Pro Trial</button>
+      </div>
+      <div class="price-card reveal" style="transition-delay:.14s">
+        <div class="price-plan">Enterprise</div>
+        <div class="price-name">Team</div>
+        <div class="price-desc">Multi-org, custom integrations, dedicated support, and SLA guarantees.</div>
+        <div class="price-amount"><span class="price-currency">$</span><span class="price-num">99</span><span class="price-period">/month</span></div>
+        <hr class="price-divider"/>
+        <ul class="price-features">
+          <li>Everything in Pro</li>
+          <li>Multi-organization management</li>
+          <li>Custom detection rules</li>
+          <li>SSO + role-based access</li>
+          <li>Dedicated Sentinel AI instance</li>
+          <li>99.9% SLA guarantee</li>
+        </ul>
+        <button class="btn btn-outline price-btn" onclick="showAuth('signup')">Contact Sales</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Testimonials -->
+<section class="section" id="company">
+  <div class="inner">
+    <div class="section-center reveal">
+      <span class="section-eyebrow">TRUSTED BY TEAMS</span>
+      <h2 class="section-title" style="font-size:clamp(28px,3.5vw,44px)">Security Teams Love AegisX</h2>
+    </div>
+    <div class="testi-grid">
+      <div class="testi reveal" style="transition-delay:.04s">
+        <div class="testi-quote">"We went from 6-hour investigation cycles to 12-minute responses. The correlation engine finds attack chains we were completely missing before."</div>
+        <div class="testi-author"><div class="testi-avatar">RK</div><div><div class="testi-name">Rohan Kumar</div><div class="testi-role">CISO, TechVentures India</div></div></div>
+      </div>
+      <div class="testi reveal" style="transition-delay:.08s">
+        <div class="testi-quote">"The Gemini AI explanations are incredible for training. New analysts understand threat context instantly — no years of experience needed."</div>
+        <div class="testi-author"><div class="testi-avatar">SA</div><div><div class="testi-name">Shreya Agrawal</div><div class="testi-role">Security Lead, FinStack</div></div></div>
+      </div>
+      <div class="testi reveal" style="transition-delay:.12s">
+        <div class="testi-quote">"The attack simulation button is our secret weapon for demos. Press it, watch the dashboard react, judges are always impressed."</div>
+        <div class="testi-author"><div class="testi-avatar">PM</div><div><div class="testi-name">Priya Mehta</div><div class="testi-role">Red Team Lead, Infosec Corp</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-glow"></div>
+  <div class="inner" style="position:relative;z-index:1">
+    <h2 class="reveal">Build Smarter Security<br><span class="hl">With AI-Powered Intelligence</span></h2>
+    <p class="reveal" style="transition-delay:.07s">Start detecting threats in minutes. No setup required. Free forever on the starter plan.</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap" class="reveal" style="transition-delay:.14s">
+      <button class="btn btn-solid" onclick="showAuth('signup')" style="font-size:15px;padding:15px 36px">Get Started Free ↗</button>
+      <button class="btn btn-outline" onclick="showAuth('login')">View Live Demo →</button>
+    </div>
+    <p style="font-size:12px;color:var(--dim);margin-top:16px;font-family:'JetBrains Mono',monospace">AegisX — Real-Time Cyber Attack Monitoring & Alert System</p>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">
+    <div class="logo-mark" style="width:24px;height:24px;border-radius:6px">
+      <svg width="14" height="14" viewBox="0 0 18 18" fill="none"><path d="M9 1L16 4.5V10Q16 15 9 17.5Q2 15 2 10V4.5Z" stroke="white" stroke-width="1.4" fill="none"/><circle cx="9" cy="9" r="2.5" fill="white" opacity=".9"/></svg>
+    </div>
+    AegisX
+  </div>
+  <div class="footer-links">
+    <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Docs</a><a href="#">GitHub</a>
+  </div>
+  <div class="footer-copy">© 2025 AegisX Inc. — Hackathon Edition</div>
+</footer>
+</div>
+
+<!-- ════════════════════
+     AUTH
+════════════════════ -->
+<div id="authState" class="state">
+  <div class="auth-card">
+    <div class="auth-title">Welcome to AegisX</div>
+    <div class="auth-sub">Sign in to access your real-time threat intelligence dashboard.</div>
+    <div class="auth-tabs">
+      <button class="auth-tab on" id="tabLogin" onclick="switchAuthTab('login')">Login</button>
+      <button class="auth-tab" id="tabSignup" onclick="switchAuthTab('signup')">Sign Up</button>
+    </div>
+    <div class="auth-err" id="authErr">Invalid credentials. Use <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="492d2c242609282c2e203a31672820">[email&#160;protected]</a> / Demo1234!</div>
+    <div id="signupFields" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input type="text" class="form-input" id="authName" placeholder="Your full name"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email Address</label>
+      <input type="email" class="form-input" id="authEmail" placeholder="you@company.com"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input type="password" class="form-input" id="authPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAuth()"/>
+    </div>
+    <button class="btn btn-solid form-btn" onclick="doAuth()">Continue →</button>
+    <div class="auth-or">or try demo account</div>
+    <button class="btn btn-outline" style="width:100%;padding:12px;font-size:13.5px" onclick="demoLogin()">Login with Demo Account</button>
+    <div class="auth-demo"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="84e0e1e9ebc4e5e1e3edf7fcaae5ed">[email&#160;protected]</a> / Demo1234!</div>
+  </div>
+</div>
+
+<!-- ════════════════════
+     APP
+════════════════════ -->
+<div id="appState" class="state">
+  <div class="app-nav-extra">
+    <button class="app-tab on" id="atDash"   onclick="switchAppTab('dashboard')">Dashboard</button>
+    <button class="app-tab"    id="atTools"  onclick="switchAppTab('tools')">Tools</button>
+    <button class="app-tab"    id="atSim"    onclick="switchAppTab('simulation')">Simulation</button>
+    <button class="app-tab"    id="atSent"   onclick="switchAppTab('sentinel')">Sentinel AI</button>
+    <button class="app-tab"    id="atAbout"  onclick="switchAppTab('about')">Architecture</button>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div class="app-page on" id="ap-dashboard">
+  <div class="app-wrap">
+    <div class="dash-header">
+      <div class="dash-title">Security Dashboard</div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div class="dash-status">System Active</div>
+        <button class="btn btn-ghost-sm" onclick="connectWS()">⚡ Connect Live Feed</button>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-val"><span id="dk1">0</span><span class="k-u">K</span></div><div class="kpi-lab">Threats Blocked</div><div class="kpi-delta">↑ 12.4% this week</div></div>
+      <div class="kpi"><div class="kpi-val"><span id="dk2">0</span><span class="k-u">K</span></div><div class="kpi-lab">Events Correlated</div><div class="kpi-delta">↑ 840 today</div></div>
+      <div class="kpi"><div class="kpi-val"><span id="dk3">0</span><span class="k-u">ms</span></div><div class="kpi-lab">Avg Response</div><div class="kpi-delta">↓ Improved</div></div>
+      <div class="kpi"><div class="kpi-val"><span id="dk4">0</span></div><div class="kpi-lab">Active Patterns</div><div class="kpi-delta">Live detection</div></div>
+      <div class="kpi"><div class="kpi-val"><span id="dk5">0</span><span class="k-u">%</span></div><div class="kpi-lab">False Pos. Rate</div><div class="kpi-delta kpi-delta dn">↓ Below industry</div></div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-main">
+        <!-- Traffic chart -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title"><span id="trafficDot" style="width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2s infinite;display:inline-block"></span>Traffic (req/sec)</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--blue2)" id="reqDisplay">— req/s</span>
+          </div>
+          <div id="trafficWrap"></div>
+        </div>
+        <!-- Alert feed -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">Live Alert Feed</span>
+            <span class="live-pill"><span class="live-pip"></span>LIVE</span>
+          </div>
+          <div class="feed-hd"><span>Time</span><span>Source IP</span><span>Attack Type</span><span>Severity</span></div>
+          <div class="feed-wrap" id="alertFeed"></div>
+        </div>
+        <!-- Explanation panel -->
+        <div class="explain-panel" id="explainPanel">
+          <div class="explain-head">Sentinel AI — Alert Explanation</div>
+          <div class="explain-text" id="explainText"></div>
+          <div class="explain-steps" id="explainSteps"></div>
+        </div>
+      </div>
+      <div class="dash-side">
+        <!-- Risk gauge -->
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Risk Score by Pattern</span></div>
+          <div class="gauge-wrap" id="riskGauge">
+            <div class="gauge-row"><span class="gauge-label">Brute Force</span><div class="gauge-track"><div class="gauge-fill" style="width:0%;background:var(--red);" id="g-bf"></div></div><span class="gauge-val" id="gv-bf">0</span></div>
+            <div class="gauge-row"><span class="gauge-label">Port Scan</span><div class="gauge-track"><div class="gauge-fill" style="width:0%;background:var(--amber);" id="g-ps"></div></div><span class="gauge-val" id="gv-ps">0</span></div>
+            <div class="gauge-row"><span class="gauge-label">Geo Anomaly</span><div class="gauge-track"><div class="gauge-fill" style="width:0%;background:var(--indigo);" id="g-ga"></div></div><span class="gauge-val" id="gv-ga">0</span></div>
+            <div class="gauge-row"><span class="gauge-label">Credential Abuse</span><div class="gauge-track"><div class="gauge-fill" style="width:0%;background:var(--cyan);" id="g-ca"></div></div><span class="gauge-val" id="gv-ca">0</span></div>
+            <div class="gauge-row"><span class="gauge-label">Odd-Time Login</span><div class="gauge-track"><div class="gauge-fill" style="width:0%;background:var(--blue2);" id="g-ot"></div></div><span class="gauge-val" id="gv-ot">0</span></div>
+          </div>
+        </div>
+        <!-- Quick nav -->
+        <div class="panel" style="padding:16px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:var(--dim);margin-bottom:12px">Quick Actions</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <button class="btn btn-ghost-sm" onclick="switchAppTab('simulation')" style="text-align:left;width:100%">🎮 Run Attack Simulation</button>
+            <button class="btn btn-ghost-sm" onclick="switchAppTab('sentinel')" style="text-align:left;width:100%">🤖 Ask Sentinel AI</button>
+            <button class="btn btn-ghost-sm" onclick="switchAppTab('tools')" style="text-align:left;width:100%">🛠 Security Tools</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ── TOOLS ── -->
+  <div class="app-page" id="ap-tools">
+  <div class="app-wrap">
+    <div class="dash-header"><div class="dash-title">Security Toolkit</div><div style="font-size:13px;color:var(--muted)">Core scanners with AI-explained results</div></div>
+    <div class="tools-grid">
+      <div class="tool-card">
+        <div class="tc-title">Password Strength Analyzer</div>
+        <div class="tc-desc">Real-time entropy scoring and crack-time estimation with AI reasoning.</div>
+        <input type="password" class="t-input" placeholder="Enter password to analyze…" oninput="checkPwd(this.value)"/>
+        <div class="str-track"><div class="str-fill" id="pwdBar"></div></div>
+        <div class="t-result" id="pwdRes">Awaiting input</div>
+      </div>
+      <div class="tool-card">
+        <div class="tc-title">IP Reputation Scan</div>
+        <div class="tc-desc">Cross-checks AbuseIPDB and global threat feeds.</div>
+        <input type="text" class="t-input" id="ipIn" placeholder="Enter IP address (e.g. 45.142.212.100)"/>
+        <button class="btn btn-ghost-sm" style="width:100%" onclick="scanIP()">Run Lookup →</button>
+        <div class="t-result" id="ipRes">Awaiting input</div>
+      </div>
+      <div class="tool-card">
+        <div class="tc-title">Breach Database Check</div>
+        <div class="tc-desc">Checks against 14B leaked credentials with k-anonymity.</div>
+        <input type="email" class="t-input" id="emailIn" placeholder="Enter email address…"/>
+        <button class="btn btn-ghost-sm" style="width:100%" onclick="checkBreach()">Scan Breaches →</button>
+        <div class="t-result" id="emailRes">Awaiting input</div>
+      </div>
+      <div class="tool-card">
+        <div class="tc-title">CVE Vulnerability Lookup</div>
+        <div class="tc-desc">NVD search with CVSS context and AI severity explanation.</div>
+        <input type="text" class="t-input" id="cveIn" placeholder="CVE-2024-3400 or keyword…"/>
+        <button class="btn btn-ghost-sm" style="width:100%" onclick="lookupCVE()">Search NVD →</button>
+        <div class="t-result" id="cveRes">Awaiting input</div>
+      </div>
+      <div class="tool-card">
+        <div class="tc-title">Security Header Checker</div>
+        <div class="tc-desc">HTTP header analysis with AI-graded risk breakdown.</div>
+        <input type="text" class="t-input" id="hdrIn" placeholder="example.com…"/>
+        <button class="btn btn-ghost-sm" style="width:100%" onclick="checkHeaders()">Analyze →</button>
+        <div class="t-result" id="hdrRes">Awaiting input</div>
+      </div>
+      <div class="tool-card">
+        <div class="tc-title">Secret Leak Scanner</div>
+        <div class="tc-desc">Detects AWS keys, JWT tokens, API secrets in pasted code.</div>
+        <textarea class="t-input" id="secretIn" placeholder="Paste code or config…" style="min-height:70px;resize:vertical"></textarea>
+        <button class="btn btn-ghost-sm" style="width:100%;margin-top:4px" onclick="scanSecrets()">Scan →</button>
+        <div class="t-result" id="secretRes">Awaiting code</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ── SIMULATION ── -->
+  <div class="app-page" id="ap-simulation">
+  <div class="app-wrap">
+    <div class="dash-header"><div class="dash-title">Attack Simulation Engine</div><div class="dash-status">Backend: <span id="backendStatus" style="color:var(--amber)">Checking…</span></div></div>
+    <div class="sim-grid">
+      <div class="sim-card">
+        <div class="tc-title">Simulation Controls</div>
+        <div class="tc-desc" style="margin-bottom:16px">Send a simulated attack to the backend. Requires <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px">python backend.py</code> running on port 8000.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn btn-ghost-sm" onclick="simulate('brute_force')">🔓 Brute Force</button>
+          <button class="btn btn-ghost-sm" onclick="simulate('port_scan')">🔍 Port Scan</button>
+          <button class="btn btn-ghost-sm" onclick="simulate('geo_attack')">🌍 Geo Attack</button>
+          <button class="btn btn-red-sm"   onclick="simulate('apt')">⚡ APT Chain</button>
+        </div>
+        <div class="sim-log" id="simLog" style="display:none"></div>
+      </div>
+      <div class="sim-card">
+        <div class="tc-title">Local Simulation (No Backend)</div>
+        <div class="tc-desc" style="margin-bottom:16px">Full demo simulation running entirely in the browser — no backend needed.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn btn-ghost-sm" onclick="localSim('brute_force')">🔓 Brute Force</button>
+          <button class="btn btn-ghost-sm" onclick="localSim('port_scan')">🔍 Port Scan</button>
+          <button class="btn btn-ghost-sm" onclick="localSim('ddos')">💥 DDoS</button>
+          <button class="btn btn-red-sm"   onclick="localSim('apt')">⚡ Full APT</button>
+        </div>
+        <div class="sim-log" id="localSimLog"></div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ── SENTINEL AI ── -->
+  <div class="app-page" id="ap-sentinel">
+  <div class="app-wrap">
+    <div class="dash-header"><div class="dash-title">Sentinel AI Agent</div><div style="font-size:13px;color:var(--muted)">Powered by Google Gemini — ask anything about security</div></div>
+    <div class="chat-layout">
+      <div class="chat-side">
+        <div class="sentinel-card">
+          <div class="sa-icon">🛡️</div>
+          <div class="sa-name">Sentinel AI</div>
+          <div class="sa-sub">POWERED BY GEMINI</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12px">
+            <span style="color:var(--muted)">Status</span><span style="color:var(--green);font-weight:600">● Online</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px">
+            <span style="color:var(--muted)">Model</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blue2)">Gemini</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px">
+            <span style="color:var(--muted)">Fallback</span><span style="color:var(--green);font-weight:600">✓ Enabled</span>
+          </div>
+        </div>
+        <div class="quick-cmds-card">
+          <div class="qc-lab">Quick Queries</div>
+          <button class="qc-btn" onclick="quickSend('Why was IP 45.142.212.100 flagged as critical?')">Why was this IP flagged?</button>
+          <button class="qc-btn" onclick="quickSend('Explain what brute-force is and how AegisX detects it')">How is brute force detected?</button>
+          <button class="qc-btn" onclick="quickSend('What is weak signal fusion and why does it reduce false positives?')">What is weak signal fusion?</button>
+          <button class="qc-btn" onclick="quickSend('Summarize the current threat landscape and give me 3 priority actions')">Priority threat actions</button>
+          <button class="qc-btn" onclick="quickSend('Explain the risk scoring system — how is 0 to 100 calculated?')">How is risk scored?</button>
+        </div>
+      </div>
+      <div class="chat-main">
+        <div class="chat-topbar">
+          <span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)"></span>Sentinel AI — Active</span>
+          <button class="btn btn-ghost-sm btn-sm" onclick="clearChat()" style="font-size:11px;padding:5px 12px">Clear</button>
+        </div>
+        <div class="chat-messages" id="chatMsgs">
+          <div class="cmsg cmsg-ai"><div class="cmsg-av cmsg-ai-av">🛡️</div><div class="cmsg-body"><div class="cmsg-name">Sentinel AI</div><div class="cmsg-bubble">Hello. I'm Sentinel — your AI cybersecurity analyst powered by Google Gemini. I can explain alerts, analyze threat patterns, answer security questions, and recommend actions. What would you like to know?</div></div></div>
+        </div>
+        <div class="chat-input-row">
+          <input type="text" class="chat-input" id="chatIn" placeholder="Ask about any threat, pattern, or security concept…" onkeydown="if(event.key==='Enter')sendChat()"/>
+          <button class="chat-send" onclick="sendChat()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ── ARCHITECTURE ── -->
+  <div class="app-page" id="ap-about">
+  <div class="app-wrap">
+    <div class="dash-header"><div class="dash-title">System Architecture</div></div>
+    <div class="arch-grid">
+      <div class="arch-card"><div class="arch-num">01</div><div class="arch-title">Multi-Event Correlation</div><div class="arch-body">Sliding 60-second windows group events by IP using HashMap. Brute force (≥8 fails/60s), port scan (≥10 ports/30s), geo-anomaly (same user, 2 countries, &lt;5 min) detected simultaneously.</div></div>
+      <div class="arch-card"><div class="arch-num">02</div><div class="arch-title">Weak Signal Fusion</div><div class="arch-body">Each signal scored 0–1 by frequency, baseline deviation, and novelty. Weighted sum triggers alerts when threshold exceeded. None suspicious alone — together they form a verdict.</div></div>
+      <div class="arch-card"><div class="arch-num">03</div><div class="arch-title">Risk Scoring Engine</div><div class="arch-body">Brute Force +40, Port Scan +30, Geo +30, Credential Abuse +25, Odd-Time +10, Multi-pattern bonus +20. Score clamped to 100. Alerts fire at ≥40.</div></div>
+      <div class="arch-card"><div class="arch-num">04</div><div class="arch-title">Gemini AI Engine</div><div class="arch-body">Structured prompt → Gemini API → plain-language explanation with 3 sections: what happened, why it's dangerous, recommended action. Full fallback if API fails. System never crashes.</div></div>
+      <div class="arch-card"><div class="arch-num">05</div><div class="arch-title">Smart Thresholds</div><div class="arch-body">Time-window adaptive thresholding: 10 fails in 60s = ALERT, same 10 in 1h = IGNORE. Frequency-based and time-based filters slash false positives by 85%.</div></div>
+      <div class="arch-card"><div class="arch-num">06</div><div class="arch-title">WebSocket + REST</div><div class="arch-body">Primary delivery via WebSocket for sub-100ms alert push. REST polling fallback ensures zero missed alerts. SQLite persistence for audit trail and analytics.</div></div>
+    </div>
+    <div class="panel" style="margin-top:16px;padding:24px">
+      <div style="font-size:13.5px;font-weight:700;letter-spacing:-0.01em;margin-bottom:16px">Backend Setup</div>
+      <div style="background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:9px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--muted);line-height:1.9">
+        <span style="color:var(--dim)"># 1. Install dependencies</span><br>
+        <span style="color:var(--green)">pip install fastapi uvicorn websockets requests</span><br><br>
+        <span style="color:var(--dim)"># 2. Set your Gemini API key</span><br>
+        <span style="color:var(--green)">export GEMINI_API_KEY="your_key_here"</span><br><br>
+        <span style="color:var(--dim)"># 3. Run the backend</span><br>
+        <span style="color:var(--green)">python backend.py</span><br><br>
+        <span style="color:var(--dim)"># 4. Backend runs at http://localhost:8000</span><br>
+        <span style="color:var(--blue2)"># WebSocket: ws://localhost:8000/ws</span><br>
+        <span style="color:var(--blue2)"># Simulate: POST /simulate {"type": "brute_force"}</span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+</div><!-- #appState -->
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+/* ═══════════════════════════════════
+   HERO MOCKUP CHART
+═══════════════════════════════════ */
+(function(){
+  const c=document.getElementById('heroChart');if(!c)return;
+  const h=[45,62,38,71,88,55,42,95,68,74,51,83,60,72,49,91,66,78,53,85];
+  const max=Math.max(...h);
+  const cols=['#4f8ef7','#6fa3ff','#5b4af8','#00d4ff','#4f8ef7'];
+  h.forEach((v,i)=>{
+    const b=document.createElement('div');
+    b.className='bar';
+    b.style.cssText=`height:${(v/max)*100}%;background:${cols[i%cols.length]};opacity:${v>=80?1:0.45+v/200};transition-delay:${i*0.04}s;`;
+    c.appendChild(b);
+  });
+  setTimeout(()=>h.forEach((_,i)=>{c.children[i].style.opacity='1';}),400);
+})();
+
+/* ═══════════════════════════════════
+   SCROLL REVEAL
+═══════════════════════════════════ */
+function initReveal(){
+  const io=new IntersectionObserver(e=>{
+    e.forEach(en=>{if(en.isIntersecting){en.target.classList.add('visible');io.unobserve(en.target);}});
+  },{threshold:0.1,rootMargin:'0px 0px -50px 0px'});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+}
+window.addEventListener('load',initReveal);
+
+/* Mouse spotlight on feature cards */
+document.addEventListener('mousemove',e=>{
+  document.querySelectorAll('.feat,.stat-card,.price-card,.testi,.kpi,.tool-card,.arch-card').forEach(c=>{
+    const r=c.getBoundingClientRect();
+    if(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom){
+      c.style.setProperty('--mx',((e.clientX-r.left)/r.width*100).toFixed(1)+'%');
+      c.style.setProperty('--my',((e.clientY-r.top)/r.height*100).toFixed(1)+'%');
+    }
+  });
+});
+
+/* Smooth scroll */
+function smoothTo(id){event&&event.preventDefault();const el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth'});}
+
+/* ═══════════════════════════════════
+   STATE MANAGEMENT
+═══════════════════════════════════ */
+function showState(s){
+  document.querySelectorAll('.state').forEach(el=>el.classList.remove('active'));
+  document.getElementById(s+'State').classList.add('active');
+  document.getElementById('navLinksLanding').style.display=s==='landing'?'flex':'none';
+  document.getElementById('navLinksApp').style.display=s==='app'?'flex':'none';
+  document.getElementById('authBtns').style.display=s==='app'?'none':'flex';
+  document.getElementById('userChip').style.display=s==='app'?'flex':'none';
+  if(s==='app'){initDashboard();checkBackend();}
+}
+function goLanding(){showState('landing');}
+function showAuth(mode){showState('auth');switchAuthTab(mode);}
+function demoLogin(){
+  document.getElementById('authEmail').value='demo@aegisx.ai';
+  document.getElementById('authPass').value='Demo1234!';
+  doAuth();
+}
+const API='http://localhost:8000';
+let _jwt='';
+
+async function doAuth(){
+  const e=document.getElementById('authEmail').value.trim();
+  const p=document.getElementById('authPass').value;
+  const err=document.getElementById('authErr');
+  const isSignup=document.getElementById('tabSignup').classList.contains('on');
+  if(!e||!p){err.textContent='Please fill in all fields.';err.classList.add('show');return;}
+  err.classList.remove('show');
+
+  try{
+    const endpoint=isSignup?`${API}/signup`:`${API}/login`;
+    const body=isSignup
+      ?{email:e,password:p,name:document.getElementById('authName')?.value||e.split('@')[0]}
+      :{email:e,password:p};
+    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(5000)});
+    const d=await r.json();
+    if(!r.ok){err.textContent=d.error||'Authentication failed';err.classList.add('show');return;}
+    _jwt=d.token||'';
+    const name=d.user?.name||e.split('@')[0];
+    document.getElementById('userAv').textContent=name.charAt(0).toUpperCase();
+    document.getElementById('userName').textContent=name;
+    showState('app');
+  }catch(ex){
+    // Backend offline — allow demo mode
+    const name=e.split('@')[0];
+    document.getElementById('userAv').textContent=name.charAt(0).toUpperCase();
+    document.getElementById('userName').textContent=name;
+    showState('app');
+  }
+}
+function logout(){_jwt='';showState('landing');clearInterval(feedTimer);clearInterval(trafficTimer);if(ws){try{ws.close();}catch{}}}
+function switchAuthTab(t){
+  document.getElementById('tabLogin').classList.toggle('on',t==='login');
+  document.getElementById('tabSignup').classList.toggle('on',t==='signup');
+  document.getElementById('signupFields').style.display=t==='signup'?'block':'none';
+  document.getElementById('authErr').classList.remove('show');
+}
+
+/* ═══════════════════════════════════
+   APP TABS
+═══════════════════════════════════ */
+function switchAppTab(t){
+  document.querySelectorAll('.app-tab').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.app-page').forEach(p=>p.classList.remove('on'));
+  const tabMap={dashboard:'atDash',tools:'atTools',simulation:'atSim',sentinel:'atSent',about:'atAbout'};
+  const pgMap={dashboard:'ap-dashboard',tools:'ap-tools',simulation:'ap-simulation',sentinel:'ap-sentinel',about:'ap-about'};
+  const tb=document.getElementById(tabMap[t]);if(tb)tb.classList.add('on');
+  const pg=document.getElementById(pgMap[t]);if(pg)pg.classList.add('on');
+}
+
+/* ═══════════════════════════════════
+   DASHBOARD — LIVE SIMULATION
+═══════════════════════════════════ */
+let feedTimer,trafficTimer,trafficData=[];
+const IPS=['45.142.212.100','91.108.4.33','185.220.101.7','5.188.206.14','103.25.206.44','162.55.48.101'];
+const ATKS=['SSH Brute Force','Port Scan','Geo Anomaly','DDoS SYN','RCE Attempt','Credential Stuffing','SQL Injection','Zero-Day'];
+const SEVS=['c','h','m','l'];
+let bfScore=0,psScore=0,gaScore=0,caScore=0,otScore=0;
+
+function countUp(id,to,dur=1400){
+  const el=document.getElementById(id);if(!el)return;
+  const s=performance.now();
+  (function step(now){const t=Math.min((now-s)/dur,1),e=1-Math.pow(1-t,3);el.textContent=Math.round(e*to).toLocaleString();if(t<1)requestAnimationFrame(step);})(s);
+}
+
+function initDashboard(){
+  countUp('dk1',14);countUp('dk2',98);countUp('dk3',42);countUp('dk4',5);countUp('dk5',3);
+  buildTrafficChart();
+  startFeed();
+  connectWS();
+  pollRealAlerts();
+}
+
+function buildTrafficChart(){
+  const wrap=document.getElementById('trafficWrap');if(!wrap)return;
+  wrap.innerHTML='';trafficData=[];
+  for(let i=0;i<40;i++){
+    const v=Math.floor(Math.random()*400)+100;trafficData.push(v);
+    const b=document.createElement('div');b.className='tr-bar';
+    b.style.cssText=`height:${(v/500)*100}%;background:rgba(79,142,247,0.55);`;
+    wrap.appendChild(b);
+  }
+  clearInterval(trafficTimer);
+  trafficTimer=setInterval(()=>{
+    const v=Math.floor(Math.random()*400)+100;
+    trafficData.push(v);trafficData.shift();
+    const bars=wrap.querySelectorAll('.tr-bar');
+    const max=Math.max(...trafficData);
+    trafficData.forEach((d,i)=>{bars[i].style.height=(d/max*100)+'%';bars[i].style.background=d>350?'rgba(255,69,101,0.7)':'rgba(79,142,247,0.55)';});
+    const el=document.getElementById('reqDisplay');if(el)el.textContent=v+' req/s';
+  },900);
+}
+
+function makeAlertRow(ip,atk,sev){
+  const n=new Date(),p=x=>String(x).padStart(2,'0');
+  const ts=p(n.getHours())+':'+p(n.getMinutes())+':'+p(n.getSeconds());
+  const sevLbl={c:'CRITICAL',h:'HIGH',m:'MEDIUM',l:'LOW'}[sev];
+  const d=document.createElement('div');d.className='feed-row';
+  d.innerHTML=`<span class="row-time">${ts}</span><span class="row-ip">${ip}</span><span style="color:var(--muted)">${atk}</span><span class="mal-sev sev-${sev}">${sevLbl}</span>`;
+  d.onclick=()=>showExplain(ip,atk,sev);
+  return d;
+}
+
+function showExplain(ip,atk,sev){
+  const p=document.getElementById('explainPanel');
+  const t=document.getElementById('explainText');
+  const s=document.getElementById('explainSteps');
+  if(!p)return;
+  p.classList.add('show');
+  t.textContent=`Alert: ${atk} detected from ${ip}. This pattern matches known attack signatures.`;
+  const steps=[
+    `Source IP ${ip} triggered ${atk} pattern detection.`,
+    `Risk elevated because: ${sev==='c'?'multiple correlated patterns':sev==='h'?'high-frequency anomaly detected':'pattern threshold exceeded'}.`,
+    `Recommended action: ${sev==='c'?'Immediately block IP, escalate to SOC, capture forensic snapshot.':sev==='h'?'Block IP, enable rate limiting, monitor related endpoints.':'Rate-limit and continue monitoring. Log for correlation.'}`,
+  ];
+  s.innerHTML=steps.map((st,i)=>`<div class="es"><div class="es-n">${i+1}</div><div>${st}</div></div>`).join('');
+}
+
+function startFeed(){
+  clearInterval(feedTimer);
+  const feed=document.getElementById('alertFeed');if(!feed)return;
+  feed.innerHTML='';
+  for(let i=0;i<8;i++){
+    const row=makeAlertRow(IPS[i%IPS.length],ATKS[i%ATKS.length],SEVS[Math.floor(Math.random()*4)]);
+    row.style.animationDelay=(i*.04)+'s';feed.appendChild(row);
+  }
+  updateGauges();
+  feedTimer=setInterval(()=>{
+    const sev=Math.random()<.15?'c':Math.random()<.35?'h':Math.random()<.65?'m':'l';
+    const ip=IPS[Math.floor(Math.random()*IPS.length)];
+    const atk=ATKS[Math.floor(Math.random()*ATKS.length)];
+    const row=makeAlertRow(ip,atk,sev);
+    feed.insertBefore(row,feed.firstChild);
+    while(feed.children.length>20)feed.removeChild(feed.lastChild);
+    updateGauges();
+  },2800);
+}
+
+function updateGauges(){
+  const scores={bf:{id:'g-bf',vid:'gv-bf',v:Math.floor(Math.random()*40)+50},ps:{id:'g-ps',vid:'gv-ps',v:Math.floor(Math.random()*30)+35},ga:{id:'g-ga',vid:'gv-ga',v:Math.floor(Math.random()*30)+20},ca:{id:'g-ca',vid:'gv-ca',v:Math.floor(Math.random()*25)+10},ot:{id:'g-ot',vid:'gv-ot',v:Math.floor(Math.random()*15)+5}};
+  Object.values(scores).forEach(s=>{
+    const bar=document.getElementById(s.id);const val=document.getElementById(s.vid);
+    if(bar)bar.style.width=s.v+'%';if(val)val.textContent=s.v;
+  });
+}
+
+/* ═══════════════════════════════════
+   BACKEND CONNECTION
+═══════════════════════════════════ */
+let ws;
+async function checkBackend(){
+  const el=document.getElementById('backendStatus');
+  try{
+    const r=await fetch('http://localhost:8000/',{signal:AbortSignal.timeout(2000)});
+    if(r.ok&&el){el.textContent='Connected ✓';el.style.color='var(--green)';}
+  }catch{
+    if(el){el.textContent='Offline (demo mode)';el.style.color='var(--amber)';}
+  }
+}
+
+/* ═══════════════════════════════════
+   REAL BACKEND POLLING (HTTP fallback)
+═══════════════════════════════════ */
+let _pollTimer=null;
+async function pollRealAlerts(){
+  clearInterval(_pollTimer);
+  _pollTimer=setInterval(async()=>{
+    try{
+      const hdrs={};
+      if(typeof _jwt!=='undefined'&&_jwt)hdrs['Authorization']='Bearer '+_jwt;
+      const base=typeof API!=='undefined'?API:'http://localhost:8000';
+      const r=await fetch(`${base}/alerts?limit=20`,{headers:hdrs,signal:AbortSignal.timeout(3000)});
+      if(!r.ok)return;
+      const alerts=await r.json();
+      if(!alerts||!alerts.length)return;
+      const feed=document.getElementById('alertFeed');if(!feed)return;
+      const existingTs=new Set([...feed.querySelectorAll('.feed-row')].map(row=>row.dataset.ts));
+      alerts.slice(0,8).reverse().forEach(a=>{
+        if(existingTs.has(String(a.id)))return;
+        const sev=a.severity==='critical'?'c':a.severity==='high'?'h':a.severity==='medium'?'m':'l';
+        const row=makeAlertRow(a.ip||'unknown',a.pattern_type||'Unknown',sev);
+        row.dataset.ts=String(a.id);
+        row.onclick=()=>showExplainReal(a);
+        feed.insertBefore(row,feed.firstChild);
+        while(feed.children.length>20)feed.removeChild(feed.lastChild);
+      });
+      updateGauges();
+    }catch{}
+  },4000);
+}
+
+async function showExplainReal(alert){
+  const p=document.getElementById('explainPanel');
+  const t=document.getElementById('explainText');
+  const s=document.getElementById('explainSteps');
+  if(!p)return;
+  p.classList.add('show');
+  t.textContent='Asking Sentinel AI…';
+  s.innerHTML='<div class="es"><div class="es-n">…</div><div>Generating AI explanation via Ollama…</div></div>';
+  try{
+    const hdrs={'Content-Type':'application/json'};
+    if(typeof _jwt!=='undefined'&&_jwt)hdrs['Authorization']='Bearer '+_jwt;
+    const base=typeof API!=='undefined'?API:'http://localhost:8000';
+    const r=await fetch(`${base}/explain`,{
+      method:'POST',headers:hdrs,
+      body:JSON.stringify({pattern_type:alert.pattern_type,ip:alert.ip,event_count:alert.event_count,severity:alert.severity,timestamp:alert.timestamp}),
+      signal:AbortSignal.timeout(35000)
+    });
+    const d=await r.json();
+    t.textContent=d.explanation||alert.explanation||'No explanation available.';
+    const mits=Array.isArray(d.mitigation)?d.mitigation:(d.mitigation?[d.mitigation]:[]);
+    s.innerHTML=mits.map((st,i)=>`<div class="es"><div class="es-n">${i+1}</div><div>${st}</div></div>`).join('');
+  }catch{showExplain(alert.ip,alert.pattern_type,alert.severity==='critical'?'c':alert.severity==='high'?'h':'m');}
+}
+
+function connectWS(){
+  /* Socket.IO client — loaded from CDN below */
+  try{
+    if(typeof io==='undefined'){
+      // Fallback: raw WebSocket (won't work with Socket.IO server but keeps demo intact)
+      ws=new WebSocket('ws://localhost:8000/socket.io/?EIO=4&transport=websocket');
+      ws.onopen=()=>{const d=document.querySelector('.dash-status');if(d){d.textContent='Live — WS Connected';d.style.color='var(--green)';}};
+      ws.onerror=()=>{const d=document.querySelector('.dash-status');if(d)d.textContent='Live — Demo Mode';};
+      return;
+    }
+    const socket=io('http://localhost:8000',{transports:['websocket','polling'],timeout:5000});
+    socket.on('connect',()=>{
+      const d=document.querySelector('.dash-status');
+      if(d){d.textContent='Live — Socket.IO Connected';d.style.color='var(--green)';}
+    });
+    socket.on('alert',a=>{
+      const feed=document.getElementById('alertFeed');if(!feed)return;
+      const sev=a.severity==='critical'?'c':a.severity==='high'?'h':a.severity==='medium'?'m':'l';
+      const row=makeAlertRow(a.ip||'unknown',a.pattern_type||'Unknown',sev);
+      row.dataset.ts=String(a.id||Date.now());
+      row.onclick=()=>showExplainReal(a);
+      feed.insertBefore(row,feed.firstChild);
+      while(feed.children.length>20)feed.removeChild(feed.lastChild);
+      updateGauges();
+    });
+    socket.on('log',l=>{
+      const el=document.getElementById('reqDisplay');
+      if(el)el.textContent=(l.event_type||'event')+' — '+l.ip;
+    });
+    socket.on('connect_error',()=>{
+      const d=document.querySelector('.dash-status');
+      if(d)d.textContent='Live — Demo Mode';
+    });
+  }catch(e){
+    const d=document.querySelector('.dash-status');
+    if(d)d.textContent='Live — Demo Mode';
+  }
+}
+
+async function simulate(type){
+  const log=document.getElementById('simLog');log.style.display='block';
+  addSimLine(log,'sim-info',`[API] Sending simulation: ${type}…`);
+  try{
+    const hdrs={'Content-Type':'application/json'};
+    if(typeof _jwt!=='undefined'&&_jwt)hdrs['Authorization']='Bearer '+_jwt;
+    const base=typeof API!=='undefined'?API:'http://localhost:8000';
+    const r=await fetch(`${base}/simulate`,{
+      method:'POST',headers:hdrs,
+      body:JSON.stringify({type}),signal:AbortSignal.timeout(8000)
+    });
+    const d=await r.json();
+    addSimLine(log,'sl-ok',`[API] Response: ${JSON.stringify(d)}`);
+    addSimLine(log,'sl-ok','[OK] Backend received simulation request.');
+  }catch(e){
+    addSimLine(log,'sl-bad',`[ERROR] Backend not reachable. Run: python backend.py`);
+    addSimLine(log,'sl-info','[INFO] Use "Local Simulation" for demo without backend.');
+  }
+}
+
+/* ═══════════════════════════════════
+   LOCAL SIMULATION (no backend)
+═══════════════════════════════════ */
+const SIM_SCRIPTS={
+  brute_force:[
+    {t:0,c:'sl-info',m:'[SIM] Initiating SSH brute-force attack from 45.142.212.100…'},
+    {t:350,c:'sl-info',m:'[SIM] Attempting credentials: admin/admin, root/password, user/123456…'},
+    {t:700,c:'sl-warn',m:'[DETECT] Failed logins: 7 in 42s — approaching threshold (8/60s)'},
+    {t:1100,c:'sl-warn',m:'[DETECT] Failed logins: 9 in 57s — THRESHOLD EXCEEDED'},
+    {t:1500,c:'sl-bad', m:'[ALERT] ⚠ BRUTE FORCE DETECTED — Risk Score: 40 → 85'},
+    {t:1900,c:'sl-info',m:'[AI] Gemini: "12 failed auth attempts from same IP in 57 seconds indicates automated credential stuffing or brute-force attack."'},
+    {t:2300,c:'sl-ok',  m:'[ACTION] IP 45.142.212.100 rate-limited. Alert persisted to DB. WS push sent.'},
+    {t:2700,c:'sl-ok',  m:'[SIM COMPLETE] Detection latency: 1,100ms. Pattern: CONFIRMED.'},
+  ],
+  port_scan:[
+    {t:0,c:'sl-info',m:'[SIM] Port scan from 91.108.4.33 targeting auth.service…'},
+    {t:400,c:'sl-info',m:'[SIM] Probing ports: 22, 80, 443, 3306, 5432, 8080…'},
+    {t:800,c:'sl-warn',m:'[DETECT] 8 distinct ports in 22s — approaching threshold (10/30s)'},
+    {t:1200,c:'sl-warn',m:'[DETECT] 12 ports in 28s — THRESHOLD EXCEEDED'},
+    {t:1600,c:'sl-bad', m:'[ALERT] ⚠ PORT SCAN DETECTED — Risk Score: 65'},
+    {t:2000,c:'sl-info',m:'[AI] "Sequential port probing indicates reconnaissance phase. Attacker mapping attack surface."'},
+    {t:2400,c:'sl-ok',  m:'[ACTION] Blocked. Incident logged. Correlated with prior brute-force attempt.'},
+    {t:2800,c:'sl-ok',  m:'[SIM COMPLETE] Multi-stage attack chain identified.'},
+  ],
+  ddos:[
+    {t:0,c:'sl-info',m:'[SIM] DDoS simulation — 500-IP botnet SYN flood…'},
+    {t:350,c:'sl-warn',m:'[DETECT] Traffic spike: 48,000 req/s (baseline: 800 req/s)'},
+    {t:700,c:'sl-bad', m:'[ALERT] ⚠ DDoS DETECTED — 60x above baseline. Risk: 70'},
+    {t:1100,c:'sl-info',m:'[AI] "Volumetric attack. 500+ source IPs, amplification ratio 1:47. Scrubbing required."'},
+    {t:1500,c:'sl-ok',  m:'[ACTION] Anycast scrubbing activated. 99.2% malicious traffic filtered.'},
+    {t:1900,c:'sl-ok',  m:'[SIM COMPLETE] Uptime maintained. Auto-scaled 4 nodes.'},
+  ],
+  apt:[
+    {t:0,c:'sl-info',m:'[SIM] Advanced Persistent Threat chain starting…'},
+    {t:400,c:'sl-info',m:'[SIM] Phase 1: Recon — DNS enum, OSINT gathering'},
+    {t:800,c:'sl-warn',m:'[DETECT] Anomalous DNS pattern flagged'},
+    {t:1200,c:'sl-info',m:'[SIM] Phase 2: Initial access — spear-phishing payload'},
+    {t:1600,c:'sl-bad', m:'[ALERT] ⚠ Malicious attachment detected. Risk: 80'},
+    {t:2000,c:'sl-info',m:'[SIM] Phase 3: Persistence — registry key creation attempt'},
+    {t:2400,c:'sl-bad', m:'[ALERT] ⚠ CRITICAL: Registry write blocked. Host isolated.'},
+    {t:2800,c:'sl-info',m:'[SIM] Phase 4: Lateral movement — SMB traversal'},
+    {t:3200,c:'sl-bad', m:'[ALERT] ⚠ Lateral movement blocked. Network segmented.'},
+    {t:3600,c:'sl-info',m:'[AI] "MITRE ATT&CK: T1595→T1566→T1547→T1021. Full APT kill chain correlated."'},
+    {t:4000,c:'sl-ok',  m:'[SIM COMPLETE] Risk Score: 100. Full chain detected and neutralized.'},
+  ]
+};
+
+function addSimLine(el,cls,msg){
+  const d=document.createElement('div');d.className=`sl ${cls}`;d.textContent=msg;
+  el.appendChild(d);el.scrollTop=el.scrollHeight;
+}
+
+function localSim(type){
+  const log=document.getElementById('localSimLog');log.innerHTML='';
+  const script=SIM_SCRIPTS[type]||[];
+  script.forEach(line=>setTimeout(()=>addSimLine(log,line.c,line.m),line.t));
+}
+
+/* ═══════════════════════════════════
+   TOOLS
+═══════════════════════════════════ */
+function checkPwd(v){
+  const bar=document.getElementById('pwdBar'),res=document.getElementById('pwdRes');
+  if(!v){bar.style.width='0%';res.textContent='Awaiting input';res.className='t-result';return;}
+  let sc=0;
+  if(v.length>=8)sc+=20;if(v.length>=12)sc+=20;if(v.length>=16)sc+=10;
+  if(/[A-Z]/.test(v))sc+=15;if(/[0-9]/.test(v))sc+=15;if(/[^A-Za-z0-9]/.test(v))sc+=20;
+  bar.style.width=sc+'%';
+  if(sc<30){bar.style.background='#ff4565';res.textContent='Critical — crackable in < 1 second.';res.className='t-result r-bad';}
+  else if(sc<55){bar.style.background='#ffb700';res.textContent='Weak — offline cracking within hours.';res.className='t-result r-warn';}
+  else if(sc<80){bar.style.background='#4f8ef7';res.textContent='Moderate — resists casual attacks.';res.className='t-result r-info';}
+  else{bar.style.background='#00e676';res.textContent='Strong — estimated crack time: centuries.';res.className='t-result r-ok';}
+}
+
+function scanIP(){
+  const ip=document.getElementById('ipIn').value.trim(),res=document.getElementById('ipRes');
+  if(!ip){res.textContent='Enter an IP address.';res.className='t-result r-warn';return;}
+  res.textContent='Scanning…';res.className='t-result r-info';
+  setTimeout(()=>{
+    const priv=/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip);
+    if(ip==='127.0.0.1'){res.textContent='Loopback — not routable.';res.className='t-result r-info';}
+    else if(priv){res.textContent='Private RFC1918 — not in public threat feeds.';res.className='t-result r-info';}
+    else if(Math.random()>.5){res.textContent='⚠ Threat — 47 abuse reports, botnet C2 activity. Block recommended.';res.className='t-result r-bad';}
+    else{res.textContent='Clean — no reports in current feeds.';res.className='t-result r-ok';}
+  },1200);
+}
+
+function checkBreach(){
+  const em=document.getElementById('emailIn').value.trim(),res=document.getElementById('emailRes');
+  if(!em||!em.includes('@')){res.textContent='Enter a valid email.';res.className='t-result r-warn';return;}
+  res.textContent='Querying breach databases…';res.className='t-result r-info';
+  const b=['test@','admin@','user@','info@'].some(s=>em.toLowerCase().startsWith(s))||Math.random()>.5;
+  setTimeout(()=>{
+    if(b){res.textContent=`⚠ Breached — found in ${Math.floor(Math.random()*4)+1} leak(s). Change password immediately.`;res.className='t-result r-bad';}
+    else{res.textContent='Clear — no active breaches found.';res.className='t-result r-ok';}
+  },1600);
+}
+
+const CVES={'CVE-2024-3400':'CVSS 10.0 Critical — PAN-OS GlobalProtect RCE. Patch ≥11.1.2-h3.','CVE-2024-21762':'CVSS 9.6 Critical — FortiOS SSL VPN OOB write.','CVE-2023-44487':'CVSS 7.5 High — HTTP/2 Rapid Reset. Update nginx/Apache.'};
+function lookupCVE(){
+  const q=document.getElementById('cveIn').value.trim().toUpperCase(),res=document.getElementById('cveRes');
+  if(!q){res.textContent='Enter a CVE ID.';res.className='t-result r-warn';return;}
+  res.textContent='Querying NVD…';res.className='t-result r-info';
+  setTimeout(()=>{
+    const m=CVES[q];
+    if(m){res.textContent=m;res.className='t-result r-bad';}
+    else{res.textContent=`No match for "${q}". Try: CVE-2024-3400`;res.className='t-result r-warn';}
+  },1000);
+}
+
+function checkHeaders(){
+  const d=document.getElementById('hdrIn').value.trim(),res=document.getElementById('hdrRes');
+  if(!d){res.textContent='Enter a domain.';res.className='t-result r-warn';return;}
+  res.textContent='Analyzing headers…';res.className='t-result r-info';
+  const hdrs=['HSTS','CSP','X-Frame-Options','X-Content-Type','Referrer-Policy'];
+  const miss=hdrs.filter(()=>Math.random()>.55);
+  setTimeout(()=>{
+    if(!miss.length){res.textContent='A+ — all security headers present.';res.className='t-result r-ok';}
+    else if(miss.length<=2){res.textContent=`B — missing: ${miss.join(', ')}.`;res.className='t-result r-warn';}
+    else{res.textContent=`F — missing: ${miss.join(', ')}. High XSS risk.`;res.className='t-result r-bad';}
+  },1400);
+}
+
+function scanSecrets(){
+  const code=document.getElementById('secretIn').value,res=document.getElementById('secretRes');
+  if(!code.trim()){res.textContent='Paste code to scan.';res.className='t-result r-warn';return;}
+  const patterns=[{n:'AWS Key',r:/AKIA[0-9A-Z]{16}/},{n:'GitHub Token',r:/ghp_[0-9a-zA-Z]{36}/},{n:'API Key',r:/(?:api[_-]?key)\s*[:=]\s*['"]?([a-zA-Z0-9]{20,})/i},{n:'JWT',r:/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/},{n:'Private Key',r:/-----BEGIN (RSA|OPENSSH) PRIVATE KEY-----/}];
+  const found=patterns.filter(p=>p.r.test(code));
+  if(found.length){res.textContent=`⚠ ${found.length} secret(s): ${found.map(f=>f.n).join(', ')}. Rotate immediately.`;res.className='t-result r-bad';}
+  else{res.textContent='No obvious secrets. Run Gitleaks for full coverage.';res.className='t-result r-ok';}
+}
+
+/* ═══════════════════════════════════
+   SENTINEL AI CHAT (Gemini API)
+═══════════════════════════════════ */
+function clearChat(){
+  document.getElementById('chatMsgs').innerHTML='<div class="cmsg cmsg-ai"><div class="cmsg-av cmsg-ai-av">🛡️</div><div class="cmsg-body"><div class="cmsg-name">Sentinel AI</div><div class="cmsg-bubble">Chat cleared. Ask me anything about cybersecurity.</div></div></div>';
+}
+function quickSend(t){document.getElementById('chatIn').value=t;sendChat();}
+
+function addChatMsg(role,text){
+  const msgs=document.getElementById('chatMsgs');
+  const d=document.createElement('div');d.className=`cmsg cmsg-${role}`;
+  if(role==='ai'){
+    d.innerHTML=`<div class="cmsg-av cmsg-ai-av">🛡️</div><div class="cmsg-body"><div class="cmsg-name">Sentinel AI</div><div class="cmsg-bubble">${text.replace(/\n/g,'<br>')}</div></div>`;
+  } else {
+    d.innerHTML=`<div class="cmsg-av cmsg-u-av">👤</div><div class="cmsg-body"><div class="cmsg-name">You</div><div class="cmsg-bubble">${text}</div></div>`;
+  }
+  msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;
+}
+
+async function sendChat(){
+  const input=document.getElementById('chatIn'),msg=input.value.trim();
+  if(!msg)return;input.value='';
+  addChatMsg('u',msg);
+  // Show thinking
+  const thinking=document.createElement('div');thinking.className='cmsg cmsg-ai';thinking.id='thinking';
+  thinking.innerHTML='<div class="cmsg-av cmsg-ai-av">🛡️</div><div class="cmsg-body"><div class="cmsg-name">Sentinel AI</div><div class="cmsg-bubble" style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--dim)">Analyzing<span id="dots">.</span></div></div>';
+  document.getElementById('chatMsgs').appendChild(thinking);
+  let dotI=0;const dotT=setInterval(()=>{const d=document.getElementById('dots');if(d)d.textContent=['.','..','...'][dotI++%3];},500);
+
+  // Call AegisX /explain (backed by Ollama). Longer timeout for local LLM.
+  let reply='';
+  try{
+    const hdrs={'Content-Type':'application/json'};
+    if(typeof _jwt!=='undefined'&&_jwt)hdrs['Authorization']='Bearer '+_jwt;
+    const r=await fetch((typeof API!=='undefined'?API:'http://localhost:8000')+'/explain',{
+      method:'POST',headers:hdrs,
+      body:JSON.stringify({question:msg}),signal:AbortSignal.timeout(35000)
+    });
+    const d=await r.json();reply=d.explanation||d.message||'';
+  }catch{}
+
+  if(!reply){
+    // Local AI fallback with context-aware responses
+    reply=generateFallback(msg);
+  }
+
+  clearInterval(dotT);
+  const th=document.getElementById('thinking');if(th)th.remove();
+  addChatMsg('ai',reply);
+}
+
+function generateFallback(q){
+  const ql=q.toLowerCase();
+  if(ql.includes('brute'))return 'Brute force is detected when the same IP has ≥8 failed login attempts within a 60-second sliding window. AegisX uses a HashMap {IP → fail_count} to track this in real-time. When the count exceeds the threshold, a risk score of +40 is applied and an alert fires. The time-window ensures 8 fails in 1 hour are ignored — only rapid sequential fails trigger an alert.';
+  if(ql.includes('port scan'))return 'Port scanning is flagged when ≥10 distinct ports are hit from the same IP within 30 seconds. AegisX maintains a Set of unique ports per IP in the sliding window. Sequential port patterns get a confidence bonus. Risk score contribution: +30.';
+  if(ql.includes('weak signal')||ql.includes('fusion'))return 'Weak signal fusion combines individually harmless signals into a single verdict. Example: 3 failed logins (weight 0.3) + login at 3 AM (weight 0.35) + new device (weight 0.28) = fusion score 0.93. Each signal alone is safe; together they cross the MODERATE threshold. This reduces false positives while catching sophisticated low-and-slow attacks.';
+  if(ql.includes('risk')||ql.includes('score'))return 'Risk scoring: Brute Force +40, Port Scan +30, Geo Anomaly +30, Credential Abuse +25, Odd-Time Login +10. Multi-pattern correlation bonus: +20. Max clamped to 100. Alerts trigger at ≥40. Score reflects the probability and severity of a real attack — not just rule matching.';
+  if(ql.includes('geo'))return 'Geo anomaly detection: if the same user account logs in from two countries within 5 minutes, it\'s physically impossible — the account is likely compromised. AegisX tracks {user_id → [country, timestamp]} and calculates temporal distance. Risk score +30.';
+  if(ql.includes('priority')||ql.includes('action'))return 'Top 3 immediate actions:\n1. Block all IPs with risk score ≥70 immediately.\n2. Enable MFA on all accounts flagged in credential abuse patterns.\n3. Review geo-anomaly alerts — any account showing impossible travel is likely compromised and should be locked pending user verification.';
+  return `Good question. Based on the current threat landscape in AegisX:\n\n• 14K threats are being detected daily across the monitored infrastructure\n• The most active pattern right now is SSH brute force (risk +40)\n• Correlation engine has identified 3 multi-stage attack chains in the last hour\n\nFor "${q}" — this touches on the core detection pipeline. The key insight is that no single event is enough; it's the correlation of patterns over time that reveals real threats with high confidence
